@@ -10,17 +10,24 @@ const router = Router({ mergeParams: true });
 function buildSearchQueries(keywords) {
   const queries = new Set();
 
-  if (keywords.length >= 3) {
-    queries.add(`${keywords[0]} AND ${keywords[1]} AND ${keywords[2]}`);
+  // Single top keywords (most specific first)
+  for (let i = 0; i < Math.min(5, keywords.length); i++) {
+    if (keywords[i].includes(' ')) {
+      // Multi-word keywords are already specific — use alone
+      queries.add(`"${keywords[i]}"`);
+    } else {
+      queries.add(keywords[i]);
+    }
   }
 
-  for (let i = 0; i < keywords.length && queries.size < 10; i++) {
-    for (let j = i + 1; j < keywords.length && queries.size < 10; j++) {
+  // Pairs from top keywords
+  for (let i = 0; i < keywords.length && queries.size < 15; i++) {
+    for (let j = i + 1; j < keywords.length && queries.size < 15; j++) {
       queries.add(`${keywords[i]} AND ${keywords[j]}`);
     }
   }
 
-  return [...queries].slice(0, 10);
+  return [...queries].slice(0, 15);
 }
 
 function buildLensQuery(queryStr) {
@@ -142,9 +149,9 @@ router.post('/:id/radar/scan', async (req, res, next) => {
       `).run(15, competitors.length, scanId);
 
       return res.json({
-        scanId,
-        totalPatents: 15,
-        competitorsFound: competitors.length,
+        id: scanId,
+        total_patents: 15,
+        competitors_found: competitors.length,
         competitors
       });
     }
@@ -224,9 +231,9 @@ router.post('/:id/radar/scan', async (req, res, next) => {
 
     // l) Return result
     res.json({
-      scanId,
-      totalPatents: filtered.length,
-      competitorsFound: competitors.length,
+      id: scanId,
+      total_patents: filtered.length,
+      competitors_found: competitors.length,
       competitors
     });
 

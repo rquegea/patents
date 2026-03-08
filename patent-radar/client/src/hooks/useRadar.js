@@ -14,9 +14,10 @@ export function useRadar() {
     setError(null);
     try {
       const data = await apiPost(`/clients/${clientId}/radar/scan`, {});
-      setCurrentScan(data);
+      const scan = { ...data, created_at: data.created_at || new Date().toISOString() };
+      setCurrentScan(scan);
       setDiscoveredCompetitors(data.competitors || []);
-      setScans(prev => [data, ...prev]);
+      setScans(prev => [scan, ...prev]);
       return data;
     } catch (err) {
       setError(err.message);

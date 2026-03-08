@@ -141,6 +141,149 @@ router.post('/', (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/competitors/radar-scan — discover competitors from tech DNA
+router.post('/radar-scan', async (req, res, next) => {
+  const db = getDb();
+  let scanId = null;
+
+  try {
+    const { companyName, keywords = [], ipcCodes = [] } = req.body;
+
+    if (!companyName?.trim()) {
+      return res.status(400).json({ error: 'companyName is required' });
+    }
+    if (keywords.length === 0 && ipcCodes.length === 0) {
+      return res.status(400).json({ error: 'Provide at least keywords or ipcCodes' });
+    }
+
+    // Separate semantic keywords from IPC codes that may have ended up in keywords[]
+    const IPC_RE = /^[A-H]\d{2}[A-Z]\d+\/\d+$/i;
+    const semanticKws = keywords.filter(k => !IPC_RE.test(k.trim()));
+    const allIpcCodes = [
+      ...ipcCodes,
+      ...keywords.filter(k => IPC_RE.test(k.trim()))
+    ].slice(0, 20);
+
+    // Build Lens query: keywords in text fields OR IPC codes in classifications
+    const should = [];
+
+    if (semanticKws.length > 0) {
+      const kwQuery = semanticKws.slice(0, 15)
+        .map(k => k.includes(' ') ? `"${k}"` : k)
+        .join(' OR ');
+      should.push({
+        query_string: {
+          query: kwQuery,
+          fields: ['title', 'abstract', 'claims'],
+          default_operator: 'or'
+        }
+      });
+    }
+
+    if (allIpcCodes.length > 0) {
+      should.push({
+        terms: { 'biblio.classifications_ipcr.symbol': allIpcCodes }
+      });
+    }
+
+    if (should.length === 0) {
+      return res.status(400).json({ error: 'No valid search criteria after filtering' });
+    }
+
+    const lensQuery = {
+      query: {
+        bool: {
+          should,
+          minimum_should_match: 1,
+          filter: [{ range: { date_published: { gte: '2015-01-01' } } }]
+        }
+      },
+      size: 100,
+      sort: [{ date_published: 'desc' }],
+      include: [
+        'lens_id', 'jurisdiction', 'date_published', 'doc_number',
+        'biblio.invention_title', 'biblio.parties.applicants',
+        'biblio.classifications_ipcr', 'publication_type', 'legal_status'
+      ]
+    };
+
+    // Create scan record
+    const scanResult = db.prepare(`
+      INSERT INTO radar_scans (client_id, search_queries, status, started_at)
+      VALUES (NULL, ?, 'running', datetime('now'))
+    `).run(JSON.stringify({ company: companyName, keywords: semanticKws.slice(0, 15), ipcCodes: allIpcCodes }));
+    scanId = scanResult.lastInsertRowid;
+
+    // Execute search
+    const lensData = await rawSearch(lensQuery);
+    const rawPatents = lensData.data || lensData.results || [];
+
+    // Group by applicant, exclude own company
+    const companyLower = companyName.toLowerCase().trim();
+    const applicantMap = new Map();
+
+    for (const patent of rawPatents) {
+      const applicants = patent.biblio?.parties?.applicants || [];
+      const title = extractTitle(patent.biblio?.invention_title);
+
+      for (const applicant of applicants) {
+        const name =
+          applicant.extracted_name?.value ||
+          applicant.applicant_name?.last_name ||
+          applicant.applicant_name?.name || '';
+        if (!name) continue;
+
+        // Exclude own company (name or partial match)
+        if (name.toLowerCase().includes(companyLower)) continue;
+
+        const key = name.trim().toLowerCase();
+        if (!applicantMap.has(key)) {
+          applicantMap.set(key, { name, country: patent.jurisdiction || '', patentCount: 0, recentPatents: [] });
+        }
+
+        const entry = applicantMap.get(key);
+        entry.patentCount++;
+        if (entry.recentPatents.length < 3) {
+          entry.recentPatents.push({ title, number: patent.doc_number, date: patent.date_published });
+        }
+      }
+    }
+
+    const companies = [...applicantMap.values()]
+      .sort((a, b) => b.patentCount - a.patentCount)
+      .slice(0, 50);
+
+    // Persist discovered competitors
+    const insertComp = db.prepare(`
+      INSERT INTO discovered_competitors (scan_id, applicant_name, country, patent_count, patent_ids)
+      VALUES (?, ?, ?, ?, '[]')
+    `);
+    db.transaction(() => {
+      for (const c of companies) insertComp.run(scanId, c.name, c.country, c.patentCount);
+    })();
+
+    // Finalize scan record
+    db.prepare(`
+      UPDATE radar_scans
+      SET status='completed', total_results=?, competitors_found=?, completed_at=datetime('now')
+      WHERE id=?
+    `).run(rawPatents.length, companies.length, scanId);
+
+    res.json({
+      scanId,
+      patents: rawPatents.length,
+      companies,
+      mock: lensData.mock || false
+    });
+
+  } catch (err) {
+    if (scanId) {
+      try { db.prepare(`UPDATE radar_scans SET status='failed', completed_at=datetime('now') WHERE id=?`).run(scanId); } catch (_) {}
+    }
+    next(err);
+  }
+});
+
 // POST /api/competitors/check-all — MUST be before /:id
 router.post('/check-all', async (req, res, next) => {
   try {

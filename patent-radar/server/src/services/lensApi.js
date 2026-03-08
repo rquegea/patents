@@ -132,7 +132,16 @@ export async function searchPatents(concept, options = {}) {
 
 export async function rawSearch(body) {
   const token = process.env.LENS_API_TOKEN;
-  if (!token) throw new Error('LENS_API_TOKEN not configured');
+  if (!token) {
+    console.log('No LENS_API_TOKEN — rawSearch using mock data');
+    const { data } = getMockResults('mock', {});
+    return {
+      total: data.length,
+      data,
+      rateLimitInfo: { remainingRequestsPerMinute: 999, remainingRecordsPerMonth: 999 },
+      mock: true
+    };
+  }
 
   const response = await fetchWithRetry(LENS_API_URL, {
     method: 'POST',
