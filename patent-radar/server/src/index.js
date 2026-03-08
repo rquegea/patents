@@ -6,6 +6,8 @@ import patentRoutes from './routes/patents.js';
 import alertRoutes from './routes/alerts.js';
 import exportRoutes from './routes/export.js';
 import competitorRoutes from './routes/competitors.js';
+import clientRoutes from './routes/clients.js';
+import radarRoutes from './routes/radar.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -21,12 +23,15 @@ app.use('/api/patents', patentRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/competitors', competitorRoutes);
+app.use('/api/clients', clientRoutes);
+app.use('/api/clients', radarRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     hasToken: !!process.env.LENS_API_TOKEN,
+    hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
     timestamp: new Date().toISOString()
   });
 });

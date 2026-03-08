@@ -89,7 +89,66 @@ function initTables() {
 
     CREATE INDEX IF NOT EXISTS idx_comp_patents_new ON competitor_patents(competitor_id, is_new);
     CREATE INDEX IF NOT EXISTS idx_comp_patents_date ON competitor_patents(date_published DESC);
+
+    CREATE TABLE IF NOT EXISTS clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      sector TEXT DEFAULT '',
+      country TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS client_patents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+      patent_number TEXT NOT NULL,
+      title TEXT,
+      claims_summary TEXT,
+      key_claims TEXT DEFAULT '[]',
+      technology_keywords TEXT DEFAULT '[]',
+      filing_date TEXT,
+      status TEXT DEFAULT 'unknown',
+      source TEXT DEFAULT 'manual',
+      raw_data TEXT DEFAULT '{}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(client_id, patent_number)
+    );
+
+    CREATE TABLE IF NOT EXISTS radar_scans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+      search_queries TEXT DEFAULT '[]',
+      status TEXT DEFAULT 'pending',
+      total_results INTEGER DEFAULT 0,
+      competitors_found INTEGER DEFAULT 0,
+      started_at DATETIME,
+      completed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS discovered_competitors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scan_id INTEGER REFERENCES radar_scans(id) ON DELETE CASCADE,
+      applicant_name TEXT NOT NULL,
+      country TEXT DEFAULT '',
+      patent_count INTEGER DEFAULT 0,
+      relevance_score REAL DEFAULT 0,
+      patent_ids TEXT DEFAULT '[]',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_client_patents_client ON client_patents(client_id);
+    CREATE INDEX IF NOT EXISTS idx_radar_scans_client ON radar_scans(client_id);
+    CREATE INDEX IF NOT EXISTS idx_discovered_scan ON discovered_competitors(scan_id);
   `);
+
+  const alterStatements = [
+    `ALTER TABLE competitors ADD COLUMN discovered_from_scan INTEGER REFERENCES radar_scans(id)`,
+    `ALTER TABLE competitors ADD COLUMN auto_discovered INTEGER DEFAULT 0`
+  ];
+  for (const stmt of alterStatements) {
+    try { db.exec(stmt); } catch (_) {}
+  }
 }
 
 export default getDb;

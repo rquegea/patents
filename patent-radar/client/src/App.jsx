@@ -7,8 +7,11 @@ import TrendCharts from './components/TrendCharts';
 import AlertManager from './components/AlertManager';
 import ExportPanel from './components/ExportPanel';
 import CompetitorsView from './components/CompetitorsView';
+import ClientVault from './components/ClientVault';
+import RadarView from './components/RadarView';
 import { usePatentSearch } from './hooks/usePatentSearch';
 import { useAlerts } from './hooks/useAlerts';
+import { useClientVault } from './hooks/useClientVault';
 
 const TABS = [
   { id: 'table', label: 'Results' },
@@ -17,24 +20,38 @@ const TABS = [
   { id: 'export', label: 'Export' },
 ];
 
+const VIEWS = [
+  { id: 'client', label: 'Mi Empresa' },
+  { id: 'radar', label: 'Radar' },
+  { id: 'competitors', label: 'Competidores' },
+  { id: 'search', label: 'Búsqueda' },
+];
+
 export default function App() {
   const { results, loading, loadingMore, error, history, search, loadMore, fetchHistory } = usePatentSearch();
   const { alerts, fetchAlerts, createAlert, deleteAlert, checkAlert } = useAlerts();
+  const clientVault = useClientVault();
+  const {
+    clients, selectedClient, setSelectedClient, patents,
+    fetchClients, createClient, updateClient, deleteClient,
+    fetchPatents, addPatent, lookupPatent, searchByApplicant, deletePatent, extractKeywords,
+  } = clientVault;
+
   const [activeTab, setActiveTab] = useState('table');
   const [selectedPatent, setSelectedPatent] = useState(null);
   const [currentQuery, setCurrentQuery] = useState('');
   const [demoMode, setDemoMode] = useState(false);
-  const [activeView, setActiveView] = useState('search');
+  const [hasAnthropicKey, setHasAnthropicKey] = useState(true);
+  const [activeView, setActiveView] = useState('client');
   const [toasts, setToasts] = useState([]);
   const [totalNewCompetitorPatents, setTotalNewCompetitorPatents] = useState(0);
 
   useEffect(() => {
     fetch('/api/health')
       .then(r => r.json())
-      .then(d => setDemoMode(!d.hasToken))
+      .then(d => { setDemoMode(!d.hasToken); setHasAnthropicKey(!!d.hasAnthropicKey); })
       .catch(() => {});
 
-    // Load competitor new count badge
     fetch('/api/competitors')
       .then(r => r.json())
       .then(data => {
@@ -43,7 +60,13 @@ export default function App() {
         }
       })
       .catch(() => {});
-  }, []);
+
+    fetchClients().then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setActiveView('radar');
+      }
+    });
+  }, [fetchClients]);
 
   const addToast = useCallback((msg, type = 'info') => {
     const id = Date.now();
@@ -61,6 +84,10 @@ export default function App() {
     setActiveTab('alerts');
   }, []);
 
+  const aggregatedKeywords = [...new Set(
+    patents.flatMap(p => Array.isArray(p.technology_keywords) ? p.technology_keywords : [])
+  )];
+
   const TOAST_COLORS = {
     success: { bg: '#d1fae5', text: '#065f46' },
     error: { bg: '#fbe4e4', text: '#e03e3e' },
@@ -72,11 +99,21 @@ export default function App() {
       {/* Header */}
       <header className="border-b border-border">
         <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between">
-          <h1 className="text-base text-text-primary" style={{ fontFamily: "'Switzer', sans-serif", fontWeight: 600, letterSpacing: '-0.04em' }}>2laps</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-base text-text-primary" style={{ fontFamily: "'Switzer', sans-serif", fontWeight: 600, letterSpacing: '-0.04em' }}>2laps</h1>
+            {selectedClient && (
+              <span className="text-sm text-text-secondary">· {selectedClient.name}</span>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             {results?.rateLimitInfo && (
               <span className="text-xs text-text-secondary">
                 {results.rateLimitInfo.remainingRequestsPerMinute} req/min
+              </span>
+            )}
+            {!hasAnthropicKey && (
+              <span className="px-2 py-0.5 rounded bg-[#fef3c7] text-[#cb912f] text-xs">
+                Sin IA
               </span>
             )}
             {demoMode && (
@@ -91,10 +128,7 @@ export default function App() {
       {/* Top nav */}
       <nav className="border-b border-border">
         <div className="max-w-[1400px] mx-auto px-6 flex gap-0">
-          {[
-            { id: 'search', label: 'Search' },
-            { id: 'competitors', label: 'Competitors' },
-          ].map(view => (
+          {VIEWS.map(view => (
             <button
               key={view.id}
               onClick={() => setActiveView(view.id)}
@@ -119,11 +153,46 @@ export default function App() {
       </nav>
 
       {/* Main content */}
-      {activeView === 'competitors' ? (
+      {activeView === 'client' && (
+        <div className="max-w-[600px] mx-auto px-6 py-5">
+          <ClientVault
+            clients={clients}
+            selectedClient={selectedClient}
+            setSelectedClient={setSelectedClient}
+            patents={patents}
+            loading={clientVault.loading}
+            error={clientVault.error}
+            fetchClients={fetchClients}
+            createClient={createClient}
+            updateClient={updateClient}
+            deleteClient={deleteClient}
+            fetchPatents={fetchPatents}
+            addPatent={addPatent}
+            lookupPatent={lookupPatent}
+            searchByApplicant={searchByApplicant}
+            deletePatent={deletePatent}
+            extractKeywords={extractKeywords}
+          />
+        </div>
+      )}
+
+      {activeView === 'radar' && (
+        <div className="max-w-[700px] mx-auto px-6 py-5">
+          <RadarView
+            clientId={selectedClient?.id}
+            clientName={selectedClient?.name}
+            technologyKeywords={aggregatedKeywords}
+          />
+        </div>
+      )}
+
+      {activeView === 'competitors' && (
         <div className="max-w-[1400px] mx-auto px-6 py-5">
           <CompetitorsView addToast={addToast} />
         </div>
-      ) : (
+      )}
+
+      {activeView === 'search' && (
         <>
           {/* Search */}
           <div className="max-w-[1400px] mx-auto px-6 pt-5 pb-3">
