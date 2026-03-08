@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.api.lens.org)",
+      "WebFetch(domain:github.com)",
+      "Bash(rm:*)",
+      "Bash(npm install:*)",
+      "Bash(lsof:*)",
+      "Bash(npx vite:*)",
+      "Bash(curl:*)",
+      "Bash(npm run:*)",
+      "Bash(ps:*)",
+      "Bash(source:*)",
+      "Bash(git:*)"
+    ]
+  }
+}
