@@ -159,21 +159,39 @@ router.post('/:id/radar/scan', async (req, res, next) => {
     // e–g) Real scan: fetch, deduplicate by lens_id
     const seen = new Map(); // lens_id → patent
 
+    console.log(`[Radar] Starting scan ${scanId} for client "${client.name}" — ${queries.length} queries, keywords: ${keywords.slice(0, 5).join(', ')}...`);
+
     for (let i = 0; i < queries.length; i++) {
+      const query = queries[i];
+      console.log(`[Radar] Query ${i + 1}/${queries.length}: "${query}"`);
       try {
-        const lensData = await rawSearch(buildLensQuery(queries[i]));
+        const lensBody = buildLensQuery(query);
+        if (i === 0) {
+          console.log('[RADAR] Lens request body:', JSON.stringify(lensBody, null, 2));
+        }
+        const lensData = await rawSearch(lensBody);
+        if (i === 0) {
+          console.log('[RADAR] Lens raw response keys:', Object.keys(lensData), 'total:', lensData.total);
+        }
         const results = lensData.data || lensData.results || [];
+        console.log(`[Radar]   → ${results.length} results (total in Lens: ${lensData.total ?? '?'})`);
         for (const patent of results) {
           if (patent.lens_id && !seen.has(patent.lens_id)) {
             seen.set(patent.lens_id, patent);
           }
         }
-      } catch (_) { /* skip failed queries */ }
+      } catch (err) {
+        console.error(`[Radar]   ✗ Query failed: ${err.message}`);
+      }
+
+      console.log(`[Radar]   Unique patents so far: ${seen.size}`);
 
       if (i < queries.length - 1) {
         await new Promise(r => setTimeout(r, 2000));
       }
     }
+
+    console.log(`[Radar] Scan complete — ${seen.size} unique patents found`);
 
     // h) Filter own client's patents
     const clientNameLower = client.name.toLowerCase();
@@ -181,6 +199,7 @@ router.post('/:id/radar/scan', async (req, res, next) => {
       const applicants = extractApplicantNames(patent);
       return !applicants.some(a => a.toLowerCase().includes(clientNameLower));
     });
+    console.log(`[Radar] After filtering "${client.name}": ${filtered.length} patents (removed ${seen.size - filtered.length} own patents)`);
 
     // i) Group by normalized applicant name
     const applicantMap = new Map(); // normalizedName → { name, country, lensIds }
@@ -196,6 +215,8 @@ router.post('/:id/radar/scan', async (req, res, next) => {
         applicantMap.get(key).lensIds.add(patent.lens_id);
       }
     }
+
+    console.log(`[Radar] Grouped into ${applicantMap.size} unique applicants. Top 5:`, [...applicantMap.values()].sort((a,b) => b.lensIds.size - a.lensIds.size).slice(0,5).map(c => `${c.name}(${c.lensIds.size})`));
 
     // j) Save discovered_competitors
     const insertComp = db.prepare(`

@@ -137,9 +137,25 @@ function initTables() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS impact_analyses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_patent_id INTEGER NOT NULL,
+      discovered_patent_lens_id TEXT NOT NULL,
+      discovered_patent_title TEXT DEFAULT '',
+      discovered_patent_applicant TEXT DEFAULT '',
+      overlap_score INTEGER DEFAULT 0,
+      tech_proximity_score INTEGER DEFAULT 0,
+      threat_level TEXT DEFAULT 'none',
+      threat_score REAL DEFAULT 0,
+      explanation TEXT DEFAULT '',
+      analyzed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(client_patent_id, discovered_patent_lens_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_client_patents_client ON client_patents(client_id);
     CREATE INDEX IF NOT EXISTS idx_radar_scans_client ON radar_scans(client_id);
     CREATE INDEX IF NOT EXISTS idx_discovered_scan ON discovered_competitors(scan_id);
+    CREATE INDEX IF NOT EXISTS idx_impact_client_patent ON impact_analyses(client_patent_id);
   `);
 
   const alterStatements = [

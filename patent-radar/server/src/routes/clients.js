@@ -207,10 +207,16 @@ router.post('/:id/patents/lookup', async (req, res, next) => {
 router.delete('/:id/patents/:patentId', (req, res, next) => {
   try {
     const db = getDb();
-    db.prepare('DELETE FROM client_patents WHERE id = ? AND client_id = ?')
-      .run(req.params.patentId, req.params.id);
-    res.json({ ok: true });
-  } catch (err) { next(err); }
+    const { id, patentId } = req.params;
+    console.log(`[DELETE patent] client=${id} patent=${patentId}`);
+    const result = db.prepare('DELETE FROM client_patents WHERE id = ? AND client_id = ?')
+      .run(patentId, id);
+    console.log(`[DELETE patent] changes=${result.changes}`);
+    res.json({ ok: true, deleted: result.changes > 0 });
+  } catch (err) {
+    console.error('[DELETE patent] ERROR:', err.message, err.stack);
+    next(err);
+  }
 });
 
 // POST /api/clients/:id/patents/:patentId/extract-keywords
@@ -247,7 +253,7 @@ router.post('/:id/patents/:patentId/extract-keywords', async (req, res, next) =>
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
           max_tokens: 2000,
-          system: 'Eres un experto en propiedad industrial. Extrae los conceptos tecnológicos clave de esta patente. Responde SOLO en JSON válido sin markdown: { "keywords": ["keyword1", ...], "search_queries": ["query1 AND query2", ...] }',
+          system: 'You are a patent technology expert. Extract the key technological concepts from this patent. CRITICAL: All keywords and search_queries MUST be in English, even if the patent text is in another language. Translate all concepts to their standard English technical terms. Respond ONLY in valid JSON without markdown: { "keywords": ["keyword1", ...], "search_queries": ["query1 AND query2", ...] }',
           messages: [{ role: 'user', content: userMessage }]
         })
       });

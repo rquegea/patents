@@ -9,6 +9,7 @@ import ExportPanel from './components/ExportPanel';
 import CompetitorsView from './components/CompetitorsView';
 import ClientVault from './components/ClientVault';
 import RadarView from './components/RadarView';
+import ImpactView from './components/ImpactView';
 import { usePatentSearch } from './hooks/usePatentSearch';
 import { useAlerts } from './hooks/useAlerts';
 import { useClientVault } from './hooks/useClientVault';
@@ -23,6 +24,7 @@ const TABS = [
 const VIEWS = [
   { id: 'client', label: 'Mi Empresa' },
   { id: 'radar', label: 'Radar' },
+  { id: 'impact', label: 'Impacto' },
   { id: 'competitors', label: 'Competidores' },
   { id: 'search', label: 'Búsqueda' },
 ];
@@ -182,6 +184,16 @@ export default function App() {
             clientId={selectedClient?.id}
             clientName={selectedClient?.name}
             technologyKeywords={aggregatedKeywords}
+          />
+        </div>
+      )}
+
+      {activeView === 'impact' && (
+        <div className="max-w-[1400px] mx-auto px-6 py-5">
+          <ImpactView
+            clientId={selectedClient?.id}
+            clientName={selectedClient?.name}
+            patents={patents}
           />
         </div>
       )}

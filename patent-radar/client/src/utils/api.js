@@ -13,8 +13,14 @@ async function request(path, options = {}) {
     return res.blob();
   }
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `API error: ${res.status}`);
+  let data;
+  try {
+    data = await res.json();
+  } catch (_) {
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return {};
+  }
+  if (!res.ok) throw new Error(data?.error || `API error: ${res.status}`);
   return data;
 }
 

@@ -8,6 +8,7 @@ import exportRoutes from './routes/export.js';
 import competitorRoutes from './routes/competitors.js';
 import clientRoutes from './routes/clients.js';
 import radarRoutes from './routes/radar.js';
+import impactRoutes from './routes/impact.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api/export', exportRoutes);
 app.use('/api/competitors', competitorRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/clients', radarRoutes);
+app.use('/api/clients', impactRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
